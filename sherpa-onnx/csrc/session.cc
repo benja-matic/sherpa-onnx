@@ -25,6 +25,16 @@ static Ort::SessionOptions GetSessionOptionsImpl(int32_t num_threads,
   sess_opts.SetIntraOpNumThreads(num_threads);
   sess_opts.SetInterOpNumThreads(num_threads);
 
+  // get path to custom ops library from environment variable
+  const char *custom_lib_path = getenv("SHERPA_ONNX_CUSTOM_LIB_PATH");
+
+  if (!(custom_lib_path == nullptr || strlen(custom_lib_path) == 0)) {
+    // print the path to custom ops library
+    std::cout << "SHERPA_ONNX_CUSTOM_LIB_PATH: " << custom_lib_path
+              << std::endl;
+    sess_opts.RegisterCustomOpsLibrary(custom_lib_path);
+  };
+
   // Other possible options
   // sess_opts.SetGraphOptimizationLevel(ORT_ENABLE_EXTENDED);
   // sess_opts.SetLogSeverityLevel(ORT_LOGGING_LEVEL_VERBOSE);
