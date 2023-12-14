@@ -5,6 +5,7 @@
 #include "sherpa-onnx/csrc/session.h"
 
 #include <algorithm>
+#include <iostream>
 #include <string>
 #include <utility>
 #include <vector>

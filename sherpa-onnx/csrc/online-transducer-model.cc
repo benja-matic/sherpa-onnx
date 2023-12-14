@@ -10,6 +10,7 @@
 #endif
 
 #include <algorithm>
+#include <iostream>
 #include <memory>
 #include <sstream>
 #include <string>
@@ -39,6 +40,16 @@ static ModelType GetModelType(char *model_data, size_t model_data_length,
                               bool debug) {
   Ort::Env env(ORT_LOGGING_LEVEL_WARNING);
   Ort::SessionOptions sess_opts;
+
+  // get path to custom ops library from environment variable
+  const char *custom_lib_path = getenv("SHERPA_ONNX_CUSTOM_LIB_PATH");
+
+  if (!(custom_lib_path == nullptr || strlen(custom_lib_path) == 0)) {
+    // print the path to custom ops library
+    std::cout << "SHERPA_ONNX_CUSTOM_LIB_PATH: " << custom_lib_path
+              << std::endl;
+    sess_opts.RegisterCustomOpsLibrary(custom_lib_path);
+  };
 
   auto sess = std::make_unique<Ort::Session>(env, model_data, model_data_length,
                                              sess_opts);
