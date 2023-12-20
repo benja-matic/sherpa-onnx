@@ -58,7 +58,19 @@ python3 ./python-api-examples/non_streaming_server.py \
   --nemo-ctc ./sherpa-onnx-nemo-ctc-en-conformer-medium/model.onnx \
   --tokens ./sherpa-onnx-nemo-ctc-en-conformer-medium/tokens.txt
 
-(4) Use a Whisper model
+(4) Use a non-streaming CTC model from WeNet
+
+cd /path/to/sherpa-onnx
+GIT_LFS_SKIP_SMUDGE=1 git clone https://huggingface.co/csukuangfj/sherpa-onnx-zh-wenet-wenetspeech
+cd sherpa-onnx-zh-wenet-wenetspeech
+git lfs pull --include "*.onnx"
+cd ..
+
+python3 ./python-api-examples/non_streaming_server.py \
+  --wenet-ctc ./sherpa-onnx-zh-wenet-wenetspeech/model.onnx \
+  --tokens ./sherpa-onnx-zh-wenet-wenetspeech/tokens.txt
+
+(5) Use a Whisper model
 
 cd /path/to/sherpa-onnx
 GIT_LFS_SKIP_SMUDGE=1 git clone https://huggingface.co/csukuangfj/sherpa-onnx-whisper-tiny.en
@@ -210,6 +222,15 @@ def add_nemo_ctc_model_args(parser: argparse.ArgumentParser):
     )
 
 
+def add_wenet_ctc_model_args(parser: argparse.ArgumentParser):
+    parser.add_argument(
+        "--wenet-ctc",
+        default="",
+        type=str,
+        help="Path to the model.onnx from WeNet CTC",
+    )
+
+
 def add_tdnn_ctc_model_args(parser: argparse.ArgumentParser):
     parser.add_argument(
         "--tdnn-model",
@@ -256,11 +277,23 @@ def add_whisper_model_args(parser: argparse.ArgumentParser):
         """,
     )
 
+    parser.add_argument(
+        "--whisper-tail-paddings",
+        default=-1,
+        type=int,
+        help="""Number of tail padding frames.
+        We have removed the 30-second constraint from whisper, so you need to
+        choose the amount of tail padding frames by yourself.
+        Use -1 to use a default value for tail padding.
+        """,
+    )
+
 
 def add_model_args(parser: argparse.ArgumentParser):
     add_transducer_model_args(parser)
     add_paraformer_model_args(parser)
     add_nemo_ctc_model_args(parser)
+    add_wenet_ctc_model_args(parser)
     add_tdnn_ctc_model_args(parser)
     add_whisper_model_args(parser)
 
@@ -392,7 +425,7 @@ def get_args():
     parser.add_argument(
         "--max-batch-size",
         type=int,
-        default=25,
+        default=3,
         help="""Max batch size for computation. Note if there are not enough
         requests in the queue, it will wait for max_wait_ms time. After that,
         even if there are not enough requests, it still sends the
@@ -437,7 +470,7 @@ def get_args():
     parser.add_argument(
         "--max-active-connections",
         type=int,
-        default=500,
+        default=200,
         help="""Maximum number of active connections. The server will refuse
         to accept new connections once the current number of active connections
         equals to this limit.
@@ -511,6 +544,7 @@ class NonStreamingServer:
         self.certificate = certificate
         self.http_server = HttpServer(doc_root)
 
+        self.nn_pool_size = nn_pool_size
         self.nn_pool = ThreadPoolExecutor(
             max_workers=nn_pool_size,
             thread_name_prefix="nn",
@@ -582,7 +616,9 @@ or <a href="/offline_record.html">/offline_record.html</a>
     async def run(self, port: int):
         logging.info("started")
 
-        task = asyncio.create_task(self.stream_consumer_task())
+        tasks = []
+        for i in range(self.nn_pool_size):
+            tasks.append(asyncio.create_task(self.stream_consumer_task()))
 
         if self.certificate:
             logging.info(f"Using certificate: {self.certificate}")
@@ -614,7 +650,7 @@ or <a href="/offline_record.html">/offline_record.html</a>
 
             await asyncio.Future()  # run forever
 
-        await task  # not reachable
+        await asyncio.gather(*tasks)  # not reachable
 
     async def recv_audio_samples(
         self,
@@ -700,6 +736,7 @@ or <a href="/offline_record.html">/offline_record.html</a>
                     batch.append(item)
             except asyncio.QueueEmpty:
                 pass
+
             stream_list = [b[0] for b in batch]
             future_list = [b[1] for b in batch]
 
@@ -804,6 +841,7 @@ def create_recognizer(args) -> sherpa_onnx.OfflineRecognizer:
     if args.encoder:
         assert len(args.paraformer) == 0, args.paraformer
         assert len(args.nemo_ctc) == 0, args.nemo_ctc
+        assert len(args.wenet_ctc) == 0, args.wenet_ctc
         assert len(args.whisper_encoder) == 0, args.whisper_encoder
         assert len(args.whisper_decoder) == 0, args.whisper_decoder
         assert len(args.tdnn_model) == 0, args.tdnn_model
@@ -827,6 +865,7 @@ def create_recognizer(args) -> sherpa_onnx.OfflineRecognizer:
         )
     elif args.paraformer:
         assert len(args.nemo_ctc) == 0, args.nemo_ctc
+        assert len(args.wenet_ctc) == 0, args.wenet_ctc
         assert len(args.whisper_encoder) == 0, args.whisper_encoder
         assert len(args.whisper_decoder) == 0, args.whisper_decoder
         assert len(args.tdnn_model) == 0, args.tdnn_model
@@ -842,6 +881,7 @@ def create_recognizer(args) -> sherpa_onnx.OfflineRecognizer:
             decoding_method=args.decoding_method,
         )
     elif args.nemo_ctc:
+        assert len(args.wenet_ctc) == 0, args.wenet_ctc
         assert len(args.whisper_encoder) == 0, args.whisper_encoder
         assert len(args.whisper_decoder) == 0, args.whisper_decoder
         assert len(args.tdnn_model) == 0, args.tdnn_model
@@ -850,6 +890,21 @@ def create_recognizer(args) -> sherpa_onnx.OfflineRecognizer:
 
         recognizer = sherpa_onnx.OfflineRecognizer.from_nemo_ctc(
             model=args.nemo_ctc,
+            tokens=args.tokens,
+            num_threads=args.num_threads,
+            sample_rate=args.sample_rate,
+            feature_dim=args.feat_dim,
+            decoding_method=args.decoding_method,
+        )
+    elif args.wenet_ctc:
+        assert len(args.whisper_encoder) == 0, args.whisper_encoder
+        assert len(args.whisper_decoder) == 0, args.whisper_decoder
+        assert len(args.tdnn_model) == 0, args.tdnn_model
+
+        assert_file_exists(args.wenet_ctc)
+
+        recognizer = sherpa_onnx.OfflineRecognizer.from_wenet_ctc(
+            model=args.wenet_ctc,
             tokens=args.tokens,
             num_threads=args.num_threads,
             sample_rate=args.sample_rate,
@@ -869,6 +924,7 @@ def create_recognizer(args) -> sherpa_onnx.OfflineRecognizer:
             decoding_method=args.decoding_method,
             language=args.whisper_language,
             task=args.whisper_task,
+            tail_paddings=args.whisper_tail_paddings,
         )
     elif args.tdnn_model:
         assert_file_exists(args.tdnn_model)

@@ -26,6 +26,23 @@ def is_windows():
     return platform.system() == "Windows"
 
 
+def is_linux():
+    return platform.system() == "Linux"
+
+
+def is_arm64():
+    return platform.machine() in ["arm64", "aarch64"]
+
+
+def is_x86():
+    return platform.machine() in ["i386", "i686", "x86_64"]
+
+
+def enable_alsa():
+    build_alsa = os.environ.get("SHERPA_ONNX_ENABLE_ALSA", None)
+    return build_alsa and is_linux() and (is_arm64() or is_x86())
+
+
 try:
     from wheel.bdist_wheel import bdist_wheel as _bdist_wheel
 
@@ -73,6 +90,10 @@ class BuildExtension(build_ext):
 
         extra_cmake_args = f" -DCMAKE_INSTALL_PREFIX={install_dir} "
         extra_cmake_args += " -DBUILD_SHARED_LIBS=ON "
+        extra_cmake_args += " -DBUILD_PIPER_PHONMIZE_EXE=OFF "
+        extra_cmake_args += " -DBUILD_PIPER_PHONMIZE_TESTS=OFF "
+        extra_cmake_args += " -DBUILD_ESPEAK_NG_EXE=OFF "
+        extra_cmake_args += " -DBUILD_ESPEAK_NG_TESTS=OFF "
 
         extra_cmake_args += " -DSHERPA_ONNX_ENABLE_CHECK=OFF "
         extra_cmake_args += " -DSHERPA_ONNX_ENABLE_PYTHON=ON "
@@ -137,7 +158,13 @@ class BuildExtension(build_ext):
         binaries += ["sherpa-onnx-offline-websocket-server"]
         binaries += ["sherpa-onnx-online-websocket-client"]
         binaries += ["sherpa-onnx-vad-microphone"]
+        binaries += ["sherpa-onnx-vad-microphone-offline-asr"]
         binaries += ["sherpa-onnx-offline-tts"]
+        binaries += ["sherpa-onnx-offline-tts-play"]
+
+        if enable_alsa():
+            binaries += ["sherpa-onnx-alsa"]
+            binaries += ["sherpa-onnx-offline-tts-play-alsa"]
 
         if is_windows():
             binaries += ["kaldi-native-fbank-core.dll"]
@@ -145,6 +172,9 @@ class BuildExtension(build_ext):
             binaries += ["sherpa-onnx-core.dll"]
             binaries += ["sherpa-onnx-portaudio.dll"]
             binaries += ["onnxruntime.dll"]
+            binaries += ["piper_phonemize.dll"]
+            binaries += ["espeak-ng.dll"]
+            binaries += ["ucd.dll"]
             binaries += ["kaldi-decoder-core.dll"]
             binaries += ["sherpa-onnx-fst.lib"]
             binaries += ["sherpa-onnx-kaldifst-core.lib"]
@@ -156,9 +186,13 @@ class BuildExtension(build_ext):
                 src_file = install_dir / "lib" / (f + suffix)
             if not src_file.is_file():
                 src_file = install_dir / ".." / (f + suffix)
+
             print(f"Copying {src_file} to {out_bin_dir}/")
             shutil.copy(f"{src_file}", f"{out_bin_dir}/")
 
         shutil.rmtree(f"{install_dir}/bin")
+        shutil.rmtree(f"{install_dir}/share")
+        shutil.rmtree(f"{install_dir}/lib/pkgconfig")
+
         if is_windows():
             shutil.rmtree(f"{install_dir}/lib")

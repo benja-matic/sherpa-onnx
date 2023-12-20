@@ -6,24 +6,45 @@
 This file demonstrates how to use sherpa-onnx Python API to generate audio
 from text, i.e., text-to-speech.
 
+
+Different from ./offline-tts-play.py, this file does not play back the
+generated audio.
+
 Usage:
 
-1. Download a model
+Example (1/2)
 
-wget https://huggingface.co/csukuangfj/vits-ljs/resolve/main/vits-ljs.onnx
-wget https://huggingface.co/csukuangfj/vits-ljs/resolve/main/lexicon.txt
-wget https://huggingface.co/csukuangfj/vits-ljs/resolve/main/tokens.txt
+wget https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-en_US-amy-low.tar.bz2
+tar xf vits-piper-en_US-amy-low.tar.bz2
 
 python3 ./python-api-examples/offline-tts.py \
-  --vits-model=./vits-ljs.onnx \
-  --vits-lexicon=./lexicon.txt \
-  --vits-tokens=./tokens.txt \
-  --output-filename=./generated.wav \
-  'liliana, the most beautiful and lovely assistant of our team!'
+ --vits-model=./vits-piper-en_US-amy-low/en_US-amy-low.onnx \
+ --vits-tokens=./vits-piper-en_US-amy-low/tokens.txt \
+ --vits-data-dir=./vits-piper-en_US-amy-low/espeak-ng-data \
+ --output-filename=./generated.wav \
+ "Today as always, men fall into two groups: slaves and free men. Whoever does not have two-thirds of his day for himself, is a slave, whatever he may be: a statesman, a businessman, an official, or a scholar."
+
+Example (2/2)
+
+wget https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-zh-aishell3.tar.bz2
+tar xvf vits-zh-aishell3.tar.bz2
+
+python3 ./python-api-examples/offline-tts.py \
+ --vits-model=./vits-aishell3.onnx \
+ --vits-lexicon=./lexicon.txt \
+ --vits-tokens=./tokens.txt \
+ --tts-rule-fsts=./rule.fst \
+ --sid=21 \
+ --output-filename=./liubei-21.wav \
+ "勿以恶小而为之，勿以善小而不为。惟贤惟德，能服于人。122334"
+
+You can find more models at
+https://github.com/k2-fsa/sherpa-onnx/releases/tag/tts-models
 
 Please see
 https://k2-fsa.github.io/sherpa/onnx/tts/index.html
 for details.
+
 """
 
 import argparse
@@ -47,13 +68,41 @@ def get_args():
     parser.add_argument(
         "--vits-lexicon",
         type=str,
+        default="",
         help="Path to lexicon.txt",
     )
 
     parser.add_argument(
         "--vits-tokens",
         type=str,
+        default="",
         help="Path to tokens.txt",
+    )
+
+    parser.add_argument(
+        "--vits-data-dir",
+        type=str,
+        default="",
+        help="""Path to the dict director of espeak-ng. If it is specified,
+        --vits-lexicon and --vits-tokens are ignored""",
+    )
+
+    parser.add_argument(
+        "--tts-rule-fsts",
+        type=str,
+        default="",
+        help="Path to rule.fst",
+    )
+
+    parser.add_argument(
+        "--max-num-sentences",
+        type=int,
+        default=2,
+        help="""Max number of sentences in a batch to avoid OOM if the input
+        text is very long. Set it to -1 to process all the sentences in a
+        single batch. A smaller value does not mean it is slower compared
+        to a larger one on CPU.
+        """,
     )
 
     parser.add_argument(
@@ -95,6 +144,13 @@ def get_args():
     )
 
     parser.add_argument(
+        "--speed",
+        type=float,
+        default=1.0,
+        help="Speech speed. Larger->faster; smaller->slower",
+    )
+
+    parser.add_argument(
         "text",
         type=str,
         help="The input text to generate audio for",
@@ -112,17 +168,23 @@ def main():
             vits=sherpa_onnx.OfflineTtsVitsModelConfig(
                 model=args.vits_model,
                 lexicon=args.vits_lexicon,
+                data_dir=args.vits_data_dir,
                 tokens=args.vits_tokens,
             ),
             provider=args.provider,
             debug=args.debug,
             num_threads=args.num_threads,
-        )
+        ),
+        rule_fsts=args.tts_rule_fsts,
+        max_num_sentences=args.max_num_sentences,
     )
+    if not tts_config.validate():
+        raise ValueError("Please check your config")
+
     tts = sherpa_onnx.OfflineTts(tts_config)
 
     start = time.time()
-    audio = tts.generate(args.text, sid=args.sid)
+    audio = tts.generate(args.text, sid=args.sid, speed=args.speed)
     end = time.time()
 
     if len(audio.samples) == 0:

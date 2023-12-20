@@ -11,6 +11,7 @@ from cmake.cmake_extension import (
     BuildExtension,
     bdist_wheel,
     cmake_extension,
+    enable_alsa,
     is_windows,
 )
 
@@ -57,13 +58,23 @@ def get_binaries_to_install():
     binaries += ["sherpa-onnx-offline-websocket-server"]
     binaries += ["sherpa-onnx-online-websocket-client"]
     binaries += ["sherpa-onnx-vad-microphone"]
+    binaries += ["sherpa-onnx-vad-microphone-offline-asr"]
     binaries += ["sherpa-onnx-offline-tts"]
+    binaries += ["sherpa-onnx-offline-tts-play"]
+
+    if enable_alsa():
+        binaries += ["sherpa-onnx-alsa"]
+        binaries += ["sherpa-onnx-offline-tts-play-alsa"]
+
     if is_windows():
         binaries += ["kaldi-native-fbank-core.dll"]
         binaries += ["sherpa-onnx-c-api.dll"]
         binaries += ["sherpa-onnx-core.dll"]
         binaries += ["sherpa-onnx-portaudio.dll"]
         binaries += ["onnxruntime.dll"]
+        binaries += ["piper_phonemize.dll"]
+        binaries += ["espeak-ng.dll"]
+        binaries += ["ucd.dll"]
         binaries += ["kaldi-decoder-core.dll"]
         binaries += ["sherpa-onnx-fst.lib"]
         binaries += ["sherpa-onnx-kaldifst-core.lib"]

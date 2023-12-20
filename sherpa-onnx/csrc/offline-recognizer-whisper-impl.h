@@ -106,31 +106,60 @@ class OfflineRecognizerWhisperImpl : public OfflineRecognizerImpl {
     std::vector<float> f = s->GetFrames();
     int32_t num_frames = f.size() / feat_dim;
 
-    if (num_frames > max_num_frames) {
-      SHERPA_ONNX_LOGE("Only waves less than 30 seconds are supported.");
-      exit(-1);
+    // we use 50 here so that there will be some zero tail paddings
+    if (num_frames >= max_num_frames - 50) {
+      SHERPA_ONNX_LOGE(
+          "Only waves less than 30 seconds are supported. We process only the "
+          "first 30 seconds and discard the remaining data");
+      num_frames = max_num_frames - 50;
     }
 
     NormalizeFeatures(f.data(), num_frames, feat_dim);
 
-    std::array<int64_t, 3> shape{1, max_num_frames, feat_dim};
+    // note that 1000 is an experience-value.
+    // You can replace 1000 by other values, say, 100.
+    //
+    // Since we have removed the 30 seconds constraint, we need
+    // tail_padding_frames so that whisper is able to detect the eot token.
+    int32_t tail_padding_frames = 1000;
+
+    if (config_.model_config.whisper.tail_paddings > 0) {
+      tail_padding_frames = config_.model_config.whisper.tail_paddings;
+    }
+
+    int32_t actual_frames =
+        std::min(num_frames + tail_padding_frames, max_num_frames);
+
+    std::array<int64_t, 3> shape{1, actual_frames, feat_dim};
 
     Ort::Value mel = Ort::Value::CreateTensor<float>(
         model_->Allocator(), shape.data(), shape.size());
-    float *p_mel = mel.GetTensorMutableData<float>();
-    std::copy(f.begin(), f.end(), p_mel);
 
-    memset(p_mel + f.size(), 0,
-           (max_num_frames - num_frames) * feat_dim * sizeof(float));
+    float *p_mel = mel.GetTensorMutableData<float>();
+    std::copy(f.data(), f.data() + num_frames * feat_dim, p_mel);
+
+    std::fill_n(p_mel + num_frames * feat_dim,
+                (actual_frames - num_frames) * feat_dim, 0);
+
     mel = Transpose12(model_->Allocator(), &mel);
 
-    auto cross_kv = model_->ForwardEncoder(std::move(mel));
+    try {
+      auto cross_kv = model_->ForwardEncoder(std::move(mel));
 
-    auto results =
-        decoder_->Decode(std::move(cross_kv.first), std::move(cross_kv.second));
+      auto results = decoder_->Decode(std::move(cross_kv.first),
+                                      std::move(cross_kv.second));
 
-    auto r = Convert(results[0], symbol_table_);
-    s->SetResult(r);
+      auto r = Convert(results[0], symbol_table_);
+      s->SetResult(r);
+    } catch (const Ort::Exception &ex) {
+      SHERPA_ONNX_LOGE(
+          "\n\nCaught exception:\n\n%s\n\nReturn an empty result. Number of "
+          "input frames: %d, Current tail "
+          "paddings: %d. If you see a lot of such exceptions, please consider "
+          "using a larger --whisper-tail-paddings",
+          ex.what(), num_frames, tail_padding_frames);
+      return;
+    }
   }
 
  private:

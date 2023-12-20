@@ -40,10 +40,17 @@ python3 ./python-api-examples/streaming_server.py \
 
 Please refer to
 https://k2-fsa.github.io/sherpa/onnx/pretrained_models/online-transducer/index.html
+https://k2-fsa.github.io/sherpa/onnx/pretrained_models/wenet/index.html
 to download pre-trained models.
 
 The model in the above help messages is from
 https://k2-fsa.github.io/sherpa/onnx/pretrained_models/online-transducer/zipformer-transducer-models.html#csukuangfj-sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20-bilingual-chinese-english
+
+To use a WeNet streaming Conformer CTC model, please use
+
+python3 ./python-api-examples/streaming_server.py \
+  --tokens=./sherpa-onnx-zh-wenet-wenetspeech/tokens.txt \
+  --wenet-ctc=./sherpa-onnx-zh-wenet-wenetspeech/model-streaming.onnx
 """
 
 import argparse
@@ -131,6 +138,12 @@ def add_model_args(parser: argparse.ArgumentParser):
     )
 
     parser.add_argument(
+        "--wenet-ctc",
+        type=str,
+        help="Path to the model.onnx from WeNet",
+    )
+
+    parser.add_argument(
         "--paraformer-encoder",
         type=str,
         help="Path to the paraformer encoder model",
@@ -212,7 +225,6 @@ def add_hotwords_args(parser: argparse.ArgumentParser):
     )
 
 
-
 def add_modified_beam_search_args(parser: argparse.ArgumentParser):
     parser.add_argument(
         "--num-active-paths",
@@ -284,7 +296,7 @@ def get_args():
     parser.add_argument(
         "--max-batch-size",
         type=int,
-        default=50,
+        default=3,
         help="""Max batch size for computation. Note if there are not enough
         requests in the queue, it will wait for max_wait_ms time. After that,
         even if there are not enough requests, it still sends the
@@ -322,7 +334,7 @@ def get_args():
     parser.add_argument(
         "--max-active-connections",
         type=int,
-        default=500,
+        default=200,
         help="""Maximum number of active connections. The server will refuse
         to accept new connections once the current number of active connections
         equals to this limit.
@@ -393,6 +405,20 @@ def create_recognizer(args) -> sherpa_onnx.OnlineRecognizer:
             rule3_min_utterance_length=args.rule3_min_utterance_length,
             provider=args.provider,
         )
+    elif args.wenet_ctc:
+        recognizer = sherpa_onnx.OnlineRecognizer.from_wenet_ctc(
+            tokens=args.tokens,
+            model=args.wenet_ctc,
+            num_threads=args.num_threads,
+            sample_rate=args.sample_rate,
+            feature_dim=args.feat_dim,
+            decoding_method=args.decoding_method,
+            enable_endpoint_detection=args.use_endpoint != 0,
+            rule1_min_trailing_silence=args.rule1_min_trailing_silence,
+            rule2_min_trailing_silence=args.rule2_min_trailing_silence,
+            rule3_min_utterance_length=args.rule3_min_utterance_length,
+            provider=args.provider,
+        )
     else:
         raise ValueError("Please provide a model")
 
@@ -452,6 +478,7 @@ class StreamingServer(object):
         self.certificate = certificate
         self.http_server = HttpServer(doc_root)
 
+        self.nn_pool_size = nn_pool_size
         self.nn_pool = ThreadPoolExecutor(
             max_workers=nn_pool_size,
             thread_name_prefix="nn",
@@ -565,7 +592,9 @@ Go back to <a href="/streaming_record.html">/streaming_record.html</a>
         return status, header, response
 
     async def run(self, port: int):
-        task = asyncio.create_task(self.stream_consumer_task())
+        tasks = []
+        for i in range(self.nn_pool_size):
+            tasks.append(asyncio.create_task(self.stream_consumer_task()))
 
         if self.certificate:
             logging.info(f"Using certificate: {self.certificate}")
@@ -603,7 +632,7 @@ Go back to <a href="/streaming_record.html">/streaming_record.html</a>
 
             await asyncio.Future()  # run forever
 
-        await task  # not reachable
+        await asyncio.gather(*tasks)  # not reachable
 
     async def handle_connection(
         self,
@@ -727,6 +756,8 @@ def check_args(args):
         assert Path(
             args.paraformer_decoder
         ).is_file(), f"{args.paraformer_decoder} does not exist"
+    elif args.wenet_ctc:
+        assert Path(args.wenet_ctc).is_file(), f"{args.wenet_ctc} does not exist"
     else:
         raise ValueError("Please provide a model")
 

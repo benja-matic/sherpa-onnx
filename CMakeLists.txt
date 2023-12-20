@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.13 FATAL_ERROR)
 project(sherpa-onnx)
 
-set(SHERPA_ONNX_VERSION "1.8.3")
+set(SHERPA_ONNX_VERSION "1.9.4")
 
 # Disable warning about
 #
@@ -100,13 +100,29 @@ message(STATUS "SHERPA_ONNX_ENABLE_C_API ${SHERPA_ONNX_ENABLE_C_API}")
 message(STATUS "SHERPA_ONNX_ENABLE_WEBSOCKET ${SHERPA_ONNX_ENABLE_WEBSOCKET}")
 message(STATUS "SHERPA_ONNX_ENABLE_GPU ${SHERPA_ONNX_ENABLE_GPU}")
 
-set(CMAKE_CXX_STANDARD 14 CACHE STRING "The C++ version to be used.")
+if(NOT CMAKE_CXX_STANDARD)
+  set(CMAKE_CXX_STANDARD 14 CACHE STRING "The C++ version to be used.")
+endif()
 set(CMAKE_CXX_EXTENSIONS OFF)
+message(STATUS "C++ Standard version: ${CMAKE_CXX_STANDARD}")
+
 
 include(CheckIncludeFileCXX)
-check_include_file_cxx(alsa/asoundlib.h SHERPA_ONNX_HAS_ALSA)
-if(SHERPA_ONNX_HAS_ALSA)
-  add_definitions(-DSHERPA_ONNX_ENABLE_ALSA=1)
+
+if(UNIX AND NOT APPLE)
+  check_include_file_cxx(alsa/asoundlib.h SHERPA_ONNX_HAS_ALSA)
+  if(SHERPA_ONNX_HAS_ALSA)
+    add_definitions(-DSHERPA_ONNX_ENABLE_ALSA=1)
+  else()
+    message(WARNING "\
+Could not find alsa/asoundlib.h !
+We won't build sherpa-ncnn-alsa
+To fix that, please do:
+  (1) sudo apt-get install alsa-utils libasound2-dev
+  (2) rm -rf build
+  (3) re-try
+  ")
+  endif()
 endif()
 
 check_include_file_cxx(cxxabi.h SHERPA_ONNX_HAVE_CXXABI_H)
@@ -156,6 +172,8 @@ endif()
 include(kaldi-native-fbank)
 include(kaldi-decoder)
 include(onnxruntime)
+set(ONNXRUNTIME_DIR ${onnxruntime_SOURCE_DIR})
+message(STATUS "ONNXRUNTIME_DIR: ${ONNXRUNTIME_DIR}")
 
 if(SHERPA_ONNX_ENABLE_PORTAUDIO)
   include(portaudio)
@@ -175,7 +193,10 @@ if(SHERPA_ONNX_ENABLE_WEBSOCKET)
   include(asio)
 endif()
 
-include(utfcpp)
+include(espeak-ng-for-piper)
+set(ESPEAK_NG_DIR ${espeak_ng_SOURCE_DIR})
+message(STATUS "ESPEAK_NG_DIR: ${ESPEAK_NG_DIR}")
+include(piper-phonemize)
 
 add_subdirectory(sherpa-onnx)
 
@@ -186,7 +207,7 @@ message(STATUS "CMAKE_CXX_FLAGS: ${CMAKE_CXX_FLAGS}")
 
 if(NOT BUILD_SHARED_LIBS)
   if(APPLE)
-    set(SHERPA_ONNX_PKG_CONFIG_EXTRA_LIBS "-lc++")
+    set(SHERPA_ONNX_PKG_CONFIG_EXTRA_LIBS "-lc++ -framework Foundation")
   endif()
 
   if(UNIX AND NOT APPLE)

@@ -8,8 +8,14 @@
 #include <memory>
 #include <string>
 
+#if __ANDROID_API__ >= 9
+#include "android/asset_manager.h"
+#include "android/asset_manager_jni.h"
+#endif
+
 #include "onnxruntime_cxx_api.h"  // NOLINT
 #include "sherpa-onnx/csrc/offline-tts-model-config.h"
+#include "sherpa-onnx/csrc/offline-tts-vits-model-metadata.h"
 
 namespace sherpa_onnx {
 
@@ -18,6 +24,9 @@ class OfflineTtsVitsModel {
   ~OfflineTtsVitsModel();
 
   explicit OfflineTtsVitsModel(const OfflineTtsModelConfig &config);
+#if __ANDROID_API__ >= 9
+  OfflineTtsVitsModel(AAssetManager *mgr, const OfflineTtsModelConfig &config);
+#endif
 
   /** Run the model.
    *
@@ -29,17 +38,9 @@ class OfflineTtsVitsModel {
    * @return Return a float32 tensor containing audio samples. You can flatten
    *         it to a 1-D tensor.
    */
-  Ort::Value Run(Ort::Value x, int64_t sid = 0);
+  Ort::Value Run(Ort::Value x, int64_t sid = 0, float speed = 1.0);
 
-  // Sample rate of the generated audio
-  int32_t SampleRate() const;
-
-  // true to insert a blank between each token
-  bool AddBlank() const;
-
-  std::string Punctuations() const;
-  std::string Language() const;
-  int32_t NumSpeakers() const;
+  const OfflineTtsVitsModelMetaData &GetMetaData() const;
 
  private:
   class Impl;

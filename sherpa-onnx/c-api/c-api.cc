@@ -438,6 +438,10 @@ int32_t SherpaOnnxCircularBufferSize(SherpaOnnxCircularBuffer *buffer) {
   return buffer->impl->Size();
 }
 
+int32_t SherpaOnnxCircularBufferHead(SherpaOnnxCircularBuffer *buffer) {
+  return buffer->impl->Head();
+}
+
 void SherpaOnnxCircularBufferReset(SherpaOnnxCircularBuffer *buffer) {
   buffer->impl->Reset();
 }
@@ -543,6 +547,8 @@ SherpaOnnxOfflineTts *SherpaOnnxCreateOfflineTts(
   tts_config.model.vits.lexicon =
       SHERPA_ONNX_OR(config->model.vits.lexicon, "");
   tts_config.model.vits.tokens = SHERPA_ONNX_OR(config->model.vits.tokens, "");
+  tts_config.model.vits.data_dir =
+      SHERPA_ONNX_OR(config->model.vits.data_dir, "");
   tts_config.model.vits.noise_scale =
       SHERPA_ONNX_OR(config->model.vits.noise_scale, 0.667);
   tts_config.model.vits.noise_scale_w =
@@ -553,6 +559,8 @@ SherpaOnnxOfflineTts *SherpaOnnxCreateOfflineTts(
   tts_config.model.num_threads = SHERPA_ONNX_OR(config->model.num_threads, 1);
   tts_config.model.debug = config->model.debug;
   tts_config.model.provider = SHERPA_ONNX_OR(config->model.provider, "cpu");
+  tts_config.rule_fsts = SHERPA_ONNX_OR(config->rule_fsts, "");
+  tts_config.max_num_sentences = SHERPA_ONNX_OR(config->max_num_sentences, 2);
 
   if (tts_config.model.debug) {
     fprintf(stderr, "%s\n", tts_config.ToString().c_str());
@@ -567,9 +575,22 @@ SherpaOnnxOfflineTts *SherpaOnnxCreateOfflineTts(
 
 void SherpaOnnxDestroyOfflineTts(SherpaOnnxOfflineTts *tts) { delete tts; }
 
+int32_t SherpaOnnxOfflineTtsSampleRate(const SherpaOnnxOfflineTts *tts) {
+  return tts->impl->SampleRate();
+}
+
 const SherpaOnnxGeneratedAudio *SherpaOnnxOfflineTtsGenerate(
-    const SherpaOnnxOfflineTts *tts, const char *text, int32_t sid) {
-  sherpa_onnx::GeneratedAudio audio = tts->impl->Generate(text, sid);
+    const SherpaOnnxOfflineTts *tts, const char *text, int32_t sid,
+    float speed) {
+  return SherpaOnnxOfflineTtsGenerateWithCallback(tts, text, sid, speed,
+                                                  nullptr);
+}
+
+const SherpaOnnxGeneratedAudio *SherpaOnnxOfflineTtsGenerateWithCallback(
+    const SherpaOnnxOfflineTts *tts, const char *text, int32_t sid, float speed,
+    SherpaOnnxGeneratedAudioCallback callback) {
+  sherpa_onnx::GeneratedAudio audio =
+      tts->impl->Generate(text, sid, speed, callback);
 
   if (audio.samples.empty()) {
     return nullptr;
@@ -587,7 +608,7 @@ const SherpaOnnxGeneratedAudio *SherpaOnnxOfflineTtsGenerate(
   return ans;
 }
 
-SHERPA_ONNX_API void SherpaOnnxDestroyOfflineTtsGeneratedAudio(
+void SherpaOnnxDestroyOfflineTtsGeneratedAudio(
     const SherpaOnnxGeneratedAudio *p) {
   if (p) {
     delete[] p->samples;
@@ -595,7 +616,7 @@ SHERPA_ONNX_API void SherpaOnnxDestroyOfflineTtsGeneratedAudio(
   }
 }
 
-int32_t SherpaOnnxDestroyOfflineWriteWave(const SherpaOnnxGeneratedAudio *p,
-                                          const char *filename) {
-  return sherpa_onnx::WriteWave(filename, p->sample_rate, p->samples, p->n);
+int32_t SherpaOnnxWriteWave(const float *samples, int32_t n,
+                            int32_t sample_rate, const char *filename) {
+  return sherpa_onnx::WriteWave(filename, sample_rate, samples, n);
 }

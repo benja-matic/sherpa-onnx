@@ -43,7 +43,7 @@ fi
 echo "ANDROID_NDK: $ANDROID_NDK"
 sleep 1
 
-onnxruntime_version=v1.16.0
+onnxruntime_version=v1.16.3
 
 if [ ! -f ./android-onnxruntime-libs/$onnxruntime_version/jni/x86/libonnxruntime.so ]; then
   if [ ! -d android-onnxruntime-libs ]; then
@@ -73,6 +73,10 @@ echo "SHERPA_ONNXRUNTIME_LIB_DIR: $SHERPA_ONNXRUNTIME_LIB_DIR"
 echo "SHERPA_ONNXRUNTIME_INCLUDE_DIR $SHERPA_ONNXRUNTIME_INCLUDE_DIR"
 
 cmake -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK/build/cmake/android.toolchain.cmake" \
+    -DBUILD_PIPER_PHONMIZE_EXE=OFF \
+    -DBUILD_PIPER_PHONMIZE_TESTS=OFF \
+    -DBUILD_ESPEAK_NG_EXE=OFF \
+    -DBUILD_ESPEAK_NG_TESTS=OFF \
     -DCMAKE_BUILD_TYPE=Release \
     -DBUILD_SHARED_LIBS=ON \
     -DSHERPA_ONNX_ENABLE_PYTHON=OFF \
@@ -90,3 +94,4 @@ cmake -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK/build/cmake/android.toolchain.cmake" 
 make -j4
 make install/strip
 cp -fv android-onnxruntime-libs/jni/x86/libonnxruntime.so install/lib
+rm -rf install/lib/pkgconfig

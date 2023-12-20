@@ -8,6 +8,11 @@
 #include <memory>
 #include <string>
 
+#if __ANDROID_API__ >= 9
+#include "android/asset_manager.h"
+#include "android/asset_manager_jni.h"
+#endif
+
 #include "sherpa-onnx/csrc/offline-tts.h"
 
 namespace sherpa_onnx {
@@ -18,8 +23,17 @@ class OfflineTtsImpl {
 
   static std::unique_ptr<OfflineTtsImpl> Create(const OfflineTtsConfig &config);
 
-  virtual GeneratedAudio Generate(const std::string &text,
-                                  int64_t sid = 0) const = 0;
+#if __ANDROID_API__ >= 9
+  static std::unique_ptr<OfflineTtsImpl> Create(AAssetManager *mgr,
+                                                const OfflineTtsConfig &config);
+#endif
+
+  virtual GeneratedAudio Generate(
+      const std::string &text, int64_t sid = 0, float speed = 1.0,
+      GeneratedAudioCallback callback = nullptr) const = 0;
+
+  // Return the sample rate of the generated audio
+  virtual int32_t SampleRate() const = 0;
 };
 
 }  // namespace sherpa_onnx

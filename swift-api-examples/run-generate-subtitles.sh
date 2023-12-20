@@ -14,7 +14,15 @@ if [ ! -d ./sherpa-onnx-whisper-tiny.en ]; then
   echo "https://k2-fsa.github.io/sherpa/onnx/pretrained_models/whisper/tiny.en.html"
   echo ""
   echo "for help"
-  exit 1
+
+  wget -q https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-whisper-tiny.en.tar.bz2
+  tar xvf sherpa-onnx-whisper-tiny.en.tar.bz2
+  rm sherpa-onnx-whisper-tiny.en.tar.bz2
+  ls -lh sherpa-onnx-whisper-tiny.en
+fi
+if [ ! -f ./silero_vad.onnx ]; then
+  echo "downloading silero_vad"
+  wget https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx
 fi
 
 if [ ! -e ./generate-subtitles ]; then
@@ -28,6 +36,8 @@ if [ ! -e ./generate-subtitles ]; then
     -l sherpa-onnx \
     -l onnxruntime \
     -o generate-subtitles
+
+  strip generate-subtitles
 else
   echo "./generate-subtitles exists - skip building"
 fi

@@ -102,7 +102,7 @@ wget https://github.com/snakers4/silero-vad/raw/master/files/silero_vad.onnx
                     0,          // frames per buffer
                     paClipOff,  // we won't output out of range samples
                                 // so don't bother clipping them
-                    RecordCallback, &config.silero_vad.window_size);
+                    RecordCallback, nullptr);
   if (err != paNoError) {
     fprintf(stderr, "portaudio error: %s\n", Pa_GetErrorText(err));
     exit(EXIT_FAILURE);

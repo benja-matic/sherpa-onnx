@@ -12,6 +12,7 @@ on:
       - '.github/scripts/test-online-paraformer.sh'
       - '.github/scripts/test-offline-transducer.sh'
       - '.github/scripts/test-offline-ctc.sh'
+      - '.github/scripts/test-online-ctc.sh'
       - '.github/scripts/test-offline-tts.sh'
       - 'CMakeLists.txt'
       - 'cmake/**'
@@ -27,6 +28,7 @@ on:
       - '.github/scripts/test-online-paraformer.sh'
       - '.github/scripts/test-offline-transducer.sh'
       - '.github/scripts/test-offline-ctc.sh'
+      - '.github/scripts/test-online-ctc.sh'
       - '.github/scripts/test-offline-tts.sh'
       - 'CMakeLists.txt'
       - 'cmake/**'
@@ -51,13 +53,22 @@ jobs:
         shared_lib: [ON, OFF]
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ${{ matrix.os }}-${{ matrix.build_type }}-shared-${{ matrix.shared_lib }}
 
       - name: Configure CMake
         shell: bash
         run: |
+          export CMAKE_CXX_COMPILER_LAUNCHER=ccache
+          export PATH="/usr/lib/ccache:/usr/local/opt/ccache/libexec:$PATH"
+          cmake --version
+
           mkdir build
           cd build
           cmake -D CMAKE_BUILD_TYPE=${{ matrix.build_type }} -D BUILD_SHARED_LIBS=${{ matrix.shared_lib }} -DCMAKE_INSTALL_PREFIX=./install ..
@@ -65,6 +76,8 @@ jobs:
       - name: Build sherpa-onnx for ubuntu
         shell: bash
         run: |
+          export PATH="/usr/lib/ccache:/usr/local/opt/ccache/libexec:$PATH"
+
           cd build
           make -j2
           make install
@@ -75,8 +88,50 @@ jobs:
       - name: Display dependencies of sherpa-onnx for linux
         shell: bash
         run: |
+          ls -lh build/bin
+          ls -lh build/_deps/onnxruntime-src/lib/
+
+          echo "strip"
+          strip build/bin/*
+          echo "after strip"
+          ls -lh build/bin
+
           file build/bin/sherpa-onnx
+          file build/bin/sherpa-onnx
+          ls -lh build/bin/sherpa-onnx
           readelf -d build/bin/sherpa-onnx
+
+      - uses: actions/upload-artifact@v3
+        if: matrix.shared_lib == 'OFF' && matrix.build_type == 'Release'
+        with:
+          name: release-static
+          path: build/bin/*
+
+      - name: Test offline Whisper
+        shell: bash
+        run: |
+          export PATH=$PWD/build/bin:$PATH
+          export EXE=sherpa-onnx-offline
+
+          readelf -d build/bin/sherpa-onnx-offline
+
+          .github/scripts/test-offline-whisper.sh
+
+      - name: Test online CTC
+        shell: bash
+        run: |
+          export PATH=$PWD/build/bin:$PATH
+          export EXE=sherpa-onnx
+
+          .github/scripts/test-online-ctc.sh
+
+      - name: Test offline CTC
+        shell: bash
+        run: |
+          export PATH=$PWD/build/bin:$PATH
+          export EXE=sherpa-onnx-offline
+
+          .github/scripts/test-offline-ctc.sh
 
       - name: Test offline TTS
         shell: bash
@@ -93,24 +148,6 @@ jobs:
           export EXE=sherpa-onnx
 
           .github/scripts/test-online-paraformer.sh
-
-      - name: Test offline Whisper
-        shell: bash
-        run: |
-          export PATH=$PWD/build/bin:$PATH
-          export EXE=sherpa-onnx-offline
-
-          readelf -d build/bin/sherpa-onnx-offline
-
-          .github/scripts/test-offline-whisper.sh
-
-      - name: Test offline CTC
-        shell: bash
-        run: |
-          export PATH=$PWD/build/bin:$PATH
-          export EXE=sherpa-onnx-offline
-
-          .github/scripts/test-offline-ctc.sh
 
       - name: Test offline transducer
         shell: bash
@@ -165,3 +202,4 @@ jobs:
         with:
           name: tts-generated-test-files
           path: tts
+

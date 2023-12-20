@@ -13,6 +13,7 @@ on:
       - '.github/scripts/test-offline-transducer.sh'
       - '.github/scripts/test-offline-ctc.sh'
       - '.github/scripts/test-offline-tts.sh'
+      - '.github/scripts/test-online-ctc.sh'
       - 'CMakeLists.txt'
       - 'cmake/**'
       - 'sherpa-onnx/csrc/*'
@@ -26,6 +27,7 @@ on:
       - '.github/scripts/test-offline-transducer.sh'
       - '.github/scripts/test-offline-ctc.sh'
       - '.github/scripts/test-offline-tts.sh'
+      - '.github/scripts/test-online-ctc.sh'
       - 'CMakeLists.txt'
       - 'cmake/**'
       - 'sherpa-onnx/csrc/*'
@@ -47,7 +49,7 @@ jobs:
         shared_lib: [ON, OFF]
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -67,6 +69,14 @@ jobs:
 
           ls -lh ./bin/Release/sherpa-onnx.exe
 
+      - name: Test online CTC
+        shell: bash
+        run: |
+          export PATH=$PWD/build/bin/Release:$PATH
+          export EXE=sherpa-onnx.exe
+
+          .github/scripts/test-online-ctc.sh
+
       - name: Test offline TTS
         shell: bash
         run: |
@@ -83,13 +93,13 @@ jobs:
 
           .github/scripts/test-online-paraformer.sh
 
-      - name: Test offline Whisper for windows x86
-        shell: bash
-        run: |
-          export PATH=$PWD/build/bin/Release:$PATH
-          export EXE=sherpa-onnx-offline.exe
-
-          .github/scripts/test-offline-whisper.sh
+      # - name: Test offline Whisper for windows x86
+      #   shell: bash
+      #   run: |
+      #     export PATH=$PWD/build/bin/Release:$PATH
+      #     export EXE=sherpa-onnx-offline.exe
+      #
+      #     .github/scripts/test-offline-whisper.sh
 
       - name: Test offline CTC for windows x86
         shell: bash

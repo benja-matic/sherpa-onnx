@@ -26,7 +26,7 @@ jobs:
         python-version: ["3.7", "3.8", "3.9", "3.10", "3.11"]
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v2
@@ -45,6 +45,7 @@ jobs:
           echo PYTHON_VERSION=$PYTHON_VERSION >> $GITHUB_ENV
 
       # https://github.com/mshr-h/onnx-dockerfile-for-raspberry-pi/blob/main/3.10-bullseye-build/Dockerfile.arm32v7
+      # https://hub.docker.com/r/balenalib/raspberrypi3-python
       - name: Run docker
         uses: addnab/docker-run-action@v3
         with:
@@ -81,6 +82,35 @@ jobs:
         shell: bash
         run: |
           ls -lh ./wheelhouse/
+
+      - name: Publish to huggingface
+        if: matrix.python-version == '3.8'
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        uses: nick-fields/retry@v2
+        with:
+          max_attempts: 20
+          timeout_seconds: 200
+          shell: bash
+          command: |
+            git config --global user.email "csukuangfj@gmail.com"
+            git config --global user.name "Fangjun Kuang"
+
+            rm -rf huggingface
+            export GIT_LFS_SKIP_SMUDGE=1
+
+            git clone https://huggingface.co/csukuangfj/sherpa-onnx-wheels huggingface
+            cd huggingface
+            git fetch
+            git pull
+            git merge -m "merge remote" --ff origin main
+
+            cp -v ../wheelhouse/*.whl .
+
+            git status
+            git add .
+            git commit -m "add more wheels"
+            git push https://csukuangfj:$HF_TOKEN@huggingface.co/csukuangfj/sherpa-onnx-wheels main
 
       - name: Upload wheel
         uses: actions/upload-artifact@v3
