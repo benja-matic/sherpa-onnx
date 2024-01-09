@@ -36,10 +36,15 @@ static Ort::SessionOptions GetSessionOptionsImpl(int32_t num_threads,
     sess_opts.RegisterCustomOpsLibrary(custom_lib_path);
   };
 
+  const char *enable_profile = getenv("SHERPA_ONNX_ENABLE_PROFILE");
+  if (!(enable_profile == nullptr || strlen(enable_profile) == 0)) {
+    sess_opts.EnableProfiling("profile");
+  };
+
   // Other possible options
   // sess_opts.SetGraphOptimizationLevel(ORT_ENABLE_EXTENDED);
   // sess_opts.SetLogSeverityLevel(ORT_LOGGING_LEVEL_VERBOSE);
-  // sess_opts.EnableProfiling("profile");
+  //   sess_opts.EnableProfiling("profile");
 
   switch (p) {
     case Provider::kCPU:
