@@ -429,10 +429,30 @@ OnlineZipformer2TransducerModel::RunEncoder(Ort::Value features,
     encoder_inputs.push_back(std::move(v));
   }
 
+  std::chrono::time_point<std::chrono::steady_clock> begin;
+  if (config_.debug) {
+     begin = std::chrono::steady_clock::now();
+  }
+
   auto encoder_out = encoder_sess_->Run(
       {}, encoder_input_names_ptr_.data(), encoder_inputs.data(),
       encoder_inputs.size(), encoder_output_names_ptr_.data(),
       encoder_output_names_ptr_.size());
+
+  if (config_.debug) {
+    const auto end = std::chrono::steady_clock::now();
+    const float elapsed_seconds =
+      std::chrono::duration_cast<std::chrono::milliseconds>(end - begin)
+        .count() / 1000.;
+
+    static float accumulated_seconds = 0.0;
+    accumulated_seconds += elapsed_seconds;
+
+
+    //fprintf(stderr, "encoder inputs size  %ld \n", encoder_inputs.size()); 
+    //fprintf(stderr, "states size  %ld \n", states.size());
+    fprintf(stderr, "encoder elapsed time: %f (%f) \n", elapsed_seconds, accumulated_seconds);
+  }
 
   std::vector<Ort::Value> next_states;
   next_states.reserve(states.size());
@@ -445,9 +465,30 @@ OnlineZipformer2TransducerModel::RunEncoder(Ort::Value features,
 
 Ort::Value OnlineZipformer2TransducerModel::RunDecoder(
     Ort::Value decoder_input) {
+
+  std::chrono::time_point<std::chrono::steady_clock> begin;
+  if (config_.debug) {
+     begin = std::chrono::steady_clock::now();
+  }
+
   auto decoder_out = decoder_sess_->Run(
       {}, decoder_input_names_ptr_.data(), &decoder_input, 1,
       decoder_output_names_ptr_.data(), decoder_output_names_ptr_.size());
+
+  if (config_.debug) {
+    const auto end = std::chrono::steady_clock::now();
+    const float elapsed_seconds =
+      std::chrono::duration_cast<std::chrono::milliseconds>(end - begin)
+        .count() / 1000.;
+
+    static float accumulated_seconds = 0.0;
+    accumulated_seconds += elapsed_seconds;
+
+    //fprintf(stderr, "encoder inputs size  %ld \n", encoder_inputs.size()); 
+    //fprintf(stderr, "states size  %ld \n", states.size());
+    fprintf(stderr, "decoder elapsed time: %f (%f) \n", elapsed_seconds, accumulated_seconds);
+  }
+
   return std::move(decoder_out[0]);
 }
 
@@ -455,10 +496,32 @@ Ort::Value OnlineZipformer2TransducerModel::RunJoiner(Ort::Value encoder_out,
                                                       Ort::Value decoder_out) {
   std::array<Ort::Value, 2> joiner_input = {std::move(encoder_out),
                                             std::move(decoder_out)};
+  
+  std::chrono::time_point<std::chrono::steady_clock> begin;
+  if (config_.debug) {
+     begin = std::chrono::steady_clock::now();
+  }
+
   auto logit =
-      joiner_sess_->Run({}, joiner_input_names_ptr_.data(), joiner_input.data(),
+    joiner_sess_->Run({}, joiner_input_names_ptr_.data(), joiner_input.data(),
                         joiner_input.size(), joiner_output_names_ptr_.data(),
                         joiner_output_names_ptr_.size());
+
+  if (config_.debug) {
+    const auto end = std::chrono::steady_clock::now();
+    const float elapsed_seconds =
+      std::chrono::duration_cast<std::chrono::milliseconds>(end - begin)
+        .count() / 1000.;
+
+    static float accumulated_seconds = 0.0;
+    accumulated_seconds += elapsed_seconds;
+
+
+    //fprintf(stderr, "encoder inputs size  %ld \n", encoder_inputs.size()); 
+    //fprintf(stderr, "states size  %ld \n", states.size());
+    fprintf(stderr, "joiner elapsed time: %f (%f) \n", elapsed_seconds, accumulated_seconds);
+  }
+
 
   return std::move(logit[0]);
 }
