@@ -4,6 +4,8 @@
 
 #include "sherpa-onnx/csrc/session.h"
 
+// #include "onnxruntime/core/providers/dnnl/dnnl_provider_factory.h"
+
 #include <algorithm>
 #include <iostream>
 #include <string>
@@ -41,6 +43,29 @@ static Ort::SessionOptions GetSessionOptionsImpl(int32_t num_threads,
     sess_opts.EnableProfiling("profile");
   };
 
+  const char *dnnl_execution = getenv("SHERPA_ONNX_DNNL_EXECUTION");
+
+//   // note, we are just hacking around it, can do nicely later
+//   if (!(dnnl_execution == nullptr || strlen(dnnl_execution) == 0)) {
+//     if (std::string(dnnl_execution) == "true") {
+//         OrtDnnlProviderOptions options;
+//         options.use_arena = 1;
+//         sess_opts.AppendExecutionProvider_Dnnl(options);
+//     }
+//   }
+
+  // note, we are just hacking around it, can do nicely later
+  if (!(dnnl_execution == nullptr || strlen(dnnl_execution) == 0)) {
+    if (std::string(dnnl_execution) == "true") {
+        std::cout << "Using DNNL as execution provider" << std::endl;
+        bool use_arena = true;
+        Ort::ThrowOnError(OrtSessionOptionsAppendExecutionProvider_Dnnl(sess_opts, use_arena));
+        // OrtDnnlProviderOptions options;
+        // options.use_arena = 1;
+        // sess_opts.AppendExecutionProvider_Dnnl(options);
+    }
+  }
+
   // Other possible options
   // sess_opts.SetGraphOptimizationLevel(ORT_ENABLE_EXTENDED);
   // sess_opts.SetLogSeverityLevel(ORT_LOGGING_LEVEL_VERBOSE);
@@ -49,6 +74,9 @@ static Ort::SessionOptions GetSessionOptionsImpl(int32_t num_threads,
   switch (p) {
     case Provider::kCPU:
       break;  // nothing to do for the CPU provider
+    // case Provider::dnnl:
+    //   sess_opts.AppendExecutionProvider_Dnnl(options);
+    //     break;
     case Provider::kCUDA: {
       std::vector<std::string> available_providers =
           Ort::GetAvailableProviders();
